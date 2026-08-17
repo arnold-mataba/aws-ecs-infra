@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Private, immutable-tag ECR repository for the aws-ecs app, and a
+  least-privilege IAM role assumable only by GitHub Actions (via OIDC) in
+  the aws-ecs-app repo/branch, for pushing images. Nested-stack child of
+  templates/root.yaml. Pull access for ECS is granted separately, on the
+  ECS task execution role in templates/ecs.yaml - not here.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: aws-ecs
+
+  EcrRepositoryName:
+    Type: String
+    Default: aws-ecs-app
+
+  GithubOwner:
+    Type: String
+    Default: arnold-mataba
+
+  GithubRepo:
+    Type: String
+    Default: aws-ecs-app
+    Description: The APP repo (not infra) - this is what pushes images.
+
+  GithubBranch:
+    Type: String
+    Default: main
+
+  GithubOidcProviderArn:
+    Type: String
+    Default: arn:aws:iam::107737161507:oidc-provider/token.actions.githubusercontent.com
+
+  GithubRepositoryId:
+    Type: String
+    Default: "1337039106"
+
+  GithubRepositoryOwnerId:
+    Type: String
+    Default: "296819917"
+
+Resources:
+  GithubActionsEcrPushRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "github-actions-ecr-push-${EcrRepositoryName}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GithubOidcProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GithubOwner}@${GithubRepositoryOwnerId}/${GithubRepo}@${GithubRepositoryId}:ref:refs/heads/${GithubBranch}"
+                token.actions.githubusercontent.com:repository_id: !Ref GithubRepositoryId
+                token.actions.githubusercontent.com:repository_owner_id: !Ref GithubRepositoryOwnerId
+      Policies:
+        - PolicyName: EcrPushLeastPrivilege
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: GetAuthToken
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: PushToAppRepo
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${EcrRepositoryName}"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  AppEcrRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref EcrRepositoryName
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Expire untagged images older than 7 days",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 7
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Keep only the 5 most recent tagged images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPatternList": ["*"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      RepositoryPolicyText:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowPushOnlyFromGithubActionsRole
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt GithubActionsEcrPushRole.Arn
+            Action:
+              - ecr:BatchCheckLayerAvailability
+              - ecr:InitiateLayerUpload
+              - ecr:UploadLayerPart
+              - ecr:CompleteLayerUpload
+              - ecr:PutImage
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  RepositoryArn:
+    Value: !GetAtt AppEcrRepo.Arn
+  RepositoryUri:
+    Value: !GetAtt AppEcrRepo.RepositoryUri
+  RepositoryName:
+    Value: !Ref EcrRepositoryName
+  PushRoleArn:
+    Value: !GetAtt GithubActionsEcrPushRole.Arn

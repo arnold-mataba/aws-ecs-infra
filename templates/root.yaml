@@ -1,0 +1,154 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Nested-stack root for aws-ecs: wires network, ecr, ecs, and pipeline
+  child stacks together. Deployed via GitSync from packaged/root-packaged.yaml
+  (this source file's local TemplateURL references get rewritten to real
+  S3 URLs by `aws cloudformation package` in CI - see
+  .github/workflows/package-templates.yml).
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: aws-ecs
+
+  ContainerPort:
+    Type: Number
+    Default: 8000
+
+  ClusterName:
+    Type: String
+    Default: aws-ecs-cluster
+
+  ServiceName:
+    Type: String
+    Default: aws-ecs-app
+
+  InitialImageTag:
+    Type: String
+    Default: "1.0.0"
+
+  EcrRepositoryName:
+    Type: String
+    Default: aws-ecs-app
+
+  GithubOwner:
+    Type: String
+    Default: arnold-mataba
+
+  GithubAppRepo:
+    Type: String
+    Default: aws-ecs-app
+
+  GithubBranch:
+    Type: String
+    Default: main
+
+  GithubOidcProviderArn:
+    Type: String
+    Default: arn:aws:iam::107737161507:oidc-provider/token.actions.githubusercontent.com
+
+  GithubAppRepositoryId:
+    Type: String
+    Default: "1337039106"
+
+  GithubAppRepositoryOwnerId:
+    Type: String
+    Default: "296819917"
+
+  PipelineName:
+    Type: String
+    Default: aws-ecs-app-pipeline
+
+  ArtifactBucketName:
+    Type: String
+    Default: arnold-bucket-dev
+
+  CodeConnectionArn:
+    Type: String
+    Default: arn:aws:codeconnections:us-east-1:107737161507:connection/6d687f90-2971-44f6-978f-2e6890adca5e
+
+  GithubAppRepoFullId:
+    Type: String
+    Default: arnold-mataba/aws-ecs-app
+
+Resources:
+  NetworkStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./network.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        ContainerPort: !Ref ContainerPort
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  EcrStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./ecr.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EcrRepositoryName: !Ref EcrRepositoryName
+        GithubOwner: !Ref GithubOwner
+        GithubRepo: !Ref GithubAppRepo
+        GithubBranch: !Ref GithubBranch
+        GithubOidcProviderArn: !Ref GithubOidcProviderArn
+        GithubRepositoryId: !Ref GithubAppRepositoryId
+        GithubRepositoryOwnerId: !Ref GithubAppRepositoryOwnerId
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  EcsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./ecs.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        ClusterName: !Ref ClusterName
+        ServiceName: !Ref ServiceName
+        ContainerPort: !Ref ContainerPort
+        ImageTag: !Ref InitialImageTag
+        VpcId: !GetAtt NetworkStack.Outputs.VpcId
+        PublicSubnetAId: !GetAtt NetworkStack.Outputs.PublicSubnetAId
+        PublicSubnetBId: !GetAtt NetworkStack.Outputs.PublicSubnetBId
+        PrivateSubnetAId: !GetAtt NetworkStack.Outputs.PrivateSubnetAId
+        PrivateSubnetBId: !GetAtt NetworkStack.Outputs.PrivateSubnetBId
+        AlbSecurityGroupId: !GetAtt NetworkStack.Outputs.AlbSecurityGroupId
+        TaskSecurityGroupId: !GetAtt NetworkStack.Outputs.TaskSecurityGroupId
+        EcrRepositoryArn: !GetAtt EcrStack.Outputs.RepositoryArn
+        EcrRepositoryUri: !GetAtt EcrStack.Outputs.RepositoryUri
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  PipelineStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./pipeline.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        PipelineName: !Ref PipelineName
+        ArtifactBucketName: !Ref ArtifactBucketName
+        EcrRepositoryName: !Ref EcrRepositoryName
+        EcrRepositoryArn: !GetAtt EcrStack.Outputs.RepositoryArn
+        ClusterName: !GetAtt EcsStack.Outputs.ClusterName
+        ServiceName: !GetAtt EcsStack.Outputs.ServiceName
+        AlbListenerArn: !GetAtt EcsStack.Outputs.AlbListenerArn
+        BlueTargetGroupName: !GetAtt EcsStack.Outputs.BlueTargetGroupName
+        GreenTargetGroupName: !GetAtt EcsStack.Outputs.GreenTargetGroupName
+        CodeConnectionArn: !Ref CodeConnectionArn
+        GithubAppRepoFullId: !Ref GithubAppRepoFullId
+        GithubBranch: !Ref GithubBranch
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+Outputs:
+  AlbDnsName:
+    Value: !GetAtt EcsStack.Outputs.AlbDnsName
+  EcrRepositoryUri:
+    Value: !GetAtt EcrStack.Outputs.RepositoryUri
+  PipelineName:
+    Value: !GetAtt PipelineStack.Outputs.PipelineName
