@@ -75,7 +75,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL: 
-        https://s3.us-east-1.amazonaws.com/arnold-bucket-dev/aws-ecs/templates/e0243f79937e06eaba436237649d8fae.template
+        https://s3.us-east-1.amazonaws.com/arnold-bucket-dev/aws-ecs/templates/aa35f1d7a24ae466580e76b0676a72e7.template
       Parameters:
         ProjectName:
           Ref: ProjectName
