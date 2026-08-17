@@ -1,0 +1,217 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Nested-stack root for aws-ecs: wires network, ecr, ecs, and pipeline\
+  \ child stacks together. Deployed via GitSync from packaged/root-packaged.yaml (this\
+  \ source file's local TemplateURL references get rewritten to real S3 URLs by `aws\
+  \ cloudformation package` in CI - see .github/workflows/package-templates.yml).\n"
+Parameters:
+  ProjectName:
+    Type: String
+    Default: aws-ecs
+  ContainerPort:
+    Type: Number
+    Default: 8000
+  ClusterName:
+    Type: String
+    Default: aws-ecs-cluster
+  ServiceName:
+    Type: String
+    Default: aws-ecs-app
+  InitialImageTag:
+    Type: String
+    Default: 1.0.0
+  EcrRepositoryName:
+    Type: String
+    Default: aws-ecs-app
+  GithubOwner:
+    Type: String
+    Default: arnold-mataba
+  GithubAppRepo:
+    Type: String
+    Default: aws-ecs-app
+  GithubBranch:
+    Type: String
+    Default: main
+  GithubOidcProviderArn:
+    Type: String
+    Default: 
+      arn:aws:iam::107737161507:oidc-provider/token.actions.githubusercontent.com
+  GithubAppRepositoryId:
+    Type: String
+    Default: '1337039106'
+  GithubAppRepositoryOwnerId:
+    Type: String
+    Default: '296819917'
+  PipelineName:
+    Type: String
+    Default: aws-ecs-app-pipeline
+  ArtifactBucketName:
+    Type: String
+    Default: arnold-bucket-dev
+  CodeConnectionArn:
+    Type: String
+    Default: 
+      arn:aws:codeconnections:us-east-1:107737161507:connection/6d687f90-2971-44f6-978f-2e6890adca5e
+  GithubAppRepoFullId:
+    Type: String
+    Default: arnold-mataba/aws-ecs-app
+Resources:
+  NetworkStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 
+        https://s3.us-east-1.amazonaws.com/arnold-bucket-dev/aws-ecs/templates/f2a03c3bb22c878e5e0cb5a870f97367.template
+      Parameters:
+        ProjectName:
+          Ref: ProjectName
+        ContainerPort:
+          Ref: ContainerPort
+      Tags:
+      - Key: Project
+        Value:
+          Ref: ProjectName
+  EcrStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 
+        https://s3.us-east-1.amazonaws.com/arnold-bucket-dev/aws-ecs/templates/e0243f79937e06eaba436237649d8fae.template
+      Parameters:
+        ProjectName:
+          Ref: ProjectName
+        EcrRepositoryName:
+          Ref: EcrRepositoryName
+        GithubOwner:
+          Ref: GithubOwner
+        GithubRepo:
+          Ref: GithubAppRepo
+        GithubBranch:
+          Ref: GithubBranch
+        GithubOidcProviderArn:
+          Ref: GithubOidcProviderArn
+        GithubRepositoryId:
+          Ref: GithubAppRepositoryId
+        GithubRepositoryOwnerId:
+          Ref: GithubAppRepositoryOwnerId
+      Tags:
+      - Key: Project
+        Value:
+          Ref: ProjectName
+  EcsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 
+        https://s3.us-east-1.amazonaws.com/arnold-bucket-dev/aws-ecs/templates/774cb979d0d4d6861777f71c6732abe6.template
+      Parameters:
+        ProjectName:
+          Ref: ProjectName
+        ClusterName:
+          Ref: ClusterName
+        ServiceName:
+          Ref: ServiceName
+        ContainerPort:
+          Ref: ContainerPort
+        ImageTag:
+          Ref: InitialImageTag
+        VpcId:
+          Fn::GetAtt:
+          - NetworkStack
+          - Outputs.VpcId
+        PublicSubnetAId:
+          Fn::GetAtt:
+          - NetworkStack
+          - Outputs.PublicSubnetAId
+        PublicSubnetBId:
+          Fn::GetAtt:
+          - NetworkStack
+          - Outputs.PublicSubnetBId
+        PrivateSubnetAId:
+          Fn::GetAtt:
+          - NetworkStack
+          - Outputs.PrivateSubnetAId
+        PrivateSubnetBId:
+          Fn::GetAtt:
+          - NetworkStack
+          - Outputs.PrivateSubnetBId
+        AlbSecurityGroupId:
+          Fn::GetAtt:
+          - NetworkStack
+          - Outputs.AlbSecurityGroupId
+        TaskSecurityGroupId:
+          Fn::GetAtt:
+          - NetworkStack
+          - Outputs.TaskSecurityGroupId
+        EcrRepositoryArn:
+          Fn::GetAtt:
+          - EcrStack
+          - Outputs.RepositoryArn
+        EcrRepositoryUri:
+          Fn::GetAtt:
+          - EcrStack
+          - Outputs.RepositoryUri
+      Tags:
+      - Key: Project
+        Value:
+          Ref: ProjectName
+  PipelineStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 
+        https://s3.us-east-1.amazonaws.com/arnold-bucket-dev/aws-ecs/templates/f1fd5b715f23fa699a4aa58e15bf8f5b.template
+      Parameters:
+        ProjectName:
+          Ref: ProjectName
+        PipelineName:
+          Ref: PipelineName
+        ArtifactBucketName:
+          Ref: ArtifactBucketName
+        EcrRepositoryName:
+          Ref: EcrRepositoryName
+        EcrRepositoryArn:
+          Fn::GetAtt:
+          - EcrStack
+          - Outputs.RepositoryArn
+        ClusterName:
+          Fn::GetAtt:
+          - EcsStack
+          - Outputs.ClusterName
+        ServiceName:
+          Fn::GetAtt:
+          - EcsStack
+          - Outputs.ServiceName
+        AlbListenerArn:
+          Fn::GetAtt:
+          - EcsStack
+          - Outputs.AlbListenerArn
+        BlueTargetGroupName:
+          Fn::GetAtt:
+          - EcsStack
+          - Outputs.BlueTargetGroupName
+        GreenTargetGroupName:
+          Fn::GetAtt:
+          - EcsStack
+          - Outputs.GreenTargetGroupName
+        CodeConnectionArn:
+          Ref: CodeConnectionArn
+        GithubAppRepoFullId:
+          Ref: GithubAppRepoFullId
+        GithubBranch:
+          Ref: GithubBranch
+      Tags:
+      - Key: Project
+        Value:
+          Ref: ProjectName
+Outputs:
+  AlbDnsName:
+    Value:
+      Fn::GetAtt:
+      - EcsStack
+      - Outputs.AlbDnsName
+  EcrRepositoryUri:
+    Value:
+      Fn::GetAtt:
+      - EcrStack
+      - Outputs.RepositoryUri
+  PipelineName:
+    Value:
+      Fn::GetAtt:
+      - PipelineStack
+      - Outputs.PipelineName
