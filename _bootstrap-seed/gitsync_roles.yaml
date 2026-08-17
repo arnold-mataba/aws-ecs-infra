@@ -1,0 +1,361 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Shared bootstrap: the two IAM roles required before any CloudFormation Git
+  sync configuration can work. This role is reused across labs (IAM
+  automation, Deep Dive Networking, Deep Dive Networking Two, and now
+  aws-ecs) - each lab's version of this file is a strict superset of the
+  previous one's permissions, deployed as an update to the same
+  `cloudformation-roles` stack. Every statement above "aws-ecs additions"
+  is unchanged from the live policy; only new statements were appended.
+
+Resources:
+  GitSyncConnectionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: iam-lab-gitsync-connection-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.sync.codeconnections.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: GitSyncConnectionPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: SyncToCloudFormation
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStacks
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:GetTemplate
+                  - cloudformation:ListChangeSets
+                  - cloudformation:ListStacks
+                  - cloudformation:ValidateTemplate
+                Resource: "*"
+              - Sid: PolicyForManagedRules
+                Effect: Allow
+                Action:
+                  - events:PutRule
+                  - events:PutTargets
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    events:ManagedBy: cloudformation.sync.codeconnections.amazonaws.com
+              - Sid: PolicyForDescribingRule
+                Effect: Allow
+                Action: events:DescribeRule
+                Resource: "*"
+
+  GitSyncStackExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: iam-lab-gitsync-stack-execution-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: IamLabResourceCreationPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # --- everything below this line, up to "aws-ecs additions", is the
+              # --- unmodified live policy (secretsmanager / ssm / iam / ecr / ec2)
+              - Sid: ManageSharedSecret
+                Effect: Allow
+                Action:
+                  - secretsmanager:CreateSecret
+                  - secretsmanager:DeleteSecret
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:TagResource
+                  - secretsmanager:UntagResource
+                  - secretsmanager:PutSecretValue
+                Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*"
+              - Sid: GenerateRandomPassword
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetRandomPassword
+                Resource: "*"
+              - Sid: ReadPublicSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}::parameter/aws/service/*"
+              - Sid: ManageIamGroupsAndPolicies
+                Effect: Allow
+                Action:
+                  - iam:CreateGroup
+                  - iam:DeleteGroup
+                  - iam:GetGroup
+                  - iam:UpdateGroup
+                  - iam:CreatePolicy
+                  - iam:DeletePolicy
+                  - iam:GetPolicy
+                  - iam:GetPolicyVersion
+                  - iam:ListPolicyVersions
+                  - iam:CreatePolicyVersion
+                  - iam:DeletePolicyVersion
+                  - iam:AttachGroupPolicy
+                  - iam:DetachGroupPolicy
+                  - iam:AttachUserPolicy
+                  - iam:DetachUserPolicy
+                  - iam:TagPolicy
+                  - ecr:SetRepositoryPolicy
+                  - ecr:PutLifecyclePolicy
+                  - ecr:GetLifecyclePolicy
+                  - ecr:DeleteLifecyclePolicy
+                  - ecr:StartLifecyclePolicyPreview
+                  - ecr:GetLifecyclePolicyPreview
+                  - ecr:CreateRepository
+                  - ecr:DeleteRepository
+                  - ecr:DescribeRepositories
+                  - ecr:GetRepositoryPolicy
+                  - ecr:DeleteRepositoryPolicy
+                  - ecr:CompleteLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:InitiateLayerUpload
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:PutImage
+                  - ecr:BatchGetImage
+                  - ecr:PutImageTagMutability
+                Resource: "*"
+              - Sid: ManageIamUsers
+                Effect: Allow
+                Action:
+                  - iam:CreateUser
+                  - iam:DeleteUser
+                  - iam:GetUser
+                  - iam:GetRole
+                  - iam:CreateRole
+                  - iam:UpdateRole
+                  - iam:DeleteRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PassRole
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:ListRoleTags
+                  - iam:CreateInstanceProfile
+                  - iam:DeleteInstanceProfile
+                  - iam:GetInstanceProfile
+                  - iam:TagInstanceProfile
+                  - iam:UntagInstanceProfile
+                  - iam:AddRoleToInstanceProfile
+                  - iam:RemoveRoleFromInstanceProfile
+                  - iam:UpdateUser
+                  - iam:TagUser
+                  - iam:UntagUser
+                  - iam:AddUserToGroup
+                  - iam:RemoveUserFromGroup
+                  - iam:CreateLoginProfile
+                  - iam:UpdateLoginProfile
+                  - iam:DeleteLoginProfile
+                  - iam:GetLoginProfile
+                  - iam:PutUserPermissionsBoundary
+                  - iam:DeleteUserPermissionsBoundary
+                  - ecr:PutImageScanningConfiguration
+                Resource: "*"
+              - Sid: ManageEc2Resources
+                Effect: Allow
+                Action:
+                  - ec2:AllocateAddress
+                  - ec2:ReleaseAddress
+                  - ec2:DescribeAddresses
+                  - ec2:AssociateAddress
+                  - ec2:DisassociateAddress
+                  - ec2:CreateInternetGateway
+                  - ec2:DeleteInternetGateway
+                  - ec2:AttachInternetGateway
+                  - ec2:DetachInternetGateway
+                  - ec2:DescribeInternetGateways
+                  - ec2:CreateVpc
+                  - ec2:DeleteVpc
+                  - ec2:DescribeVpcs
+                  - ec2:CreateSubnet
+                  - ec2:DeleteSubnet
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:CreateRouteTable
+                  - ec2:DeleteRouteTable
+                  - ec2:CreateRoute
+                  - ec2:DeleteRoute
+                  - ec2:DescribeRouteTables
+                  - ec2:AssociateRouteTable
+                  - ec2:DisassociateRouteTable
+                  - ec2:CreateTags
+                  - ec2:DeleteTags
+                  - ec2:ModifyVpcAttribute
+                  - ec2:DescribeVpcAttribute
+                  - ec2:ModifySubnetAttribute
+                  - ec2:CreateNatGateway
+                  - ec2:DescribeNatGateways
+                  - ec2:DeleteNatGateway
+                  - ec2:DescribeImages
+                  - ec2:RunInstances
+                  - ec2:TerminateInstances
+                  - ec2:StartInstances
+                  - ec2:StopInstances
+                  - ec2:RebootInstances
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                  - ec2:ModifyInstanceAttribute
+                  - ec2:CreateSecurityGroup
+                  - ec2:DeleteSecurityGroup
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:RevokeSecurityGroupIngress
+                  - ec2:AuthorizeSecurityGroupEgress
+                  - ec2:RevokeSecurityGroupEgress
+                  - ec2:DescribeSecurityGroups
+                Resource: "*"
+              - Sid: CloudFormationStackReadForNestedOperations
+                Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:GetTemplate
+                Resource: "*"
+
+              # --- aws-ecs additions (new statements, nothing above changed) ---
+              - Sid: ManageVpcEndpoints
+                Effect: Allow
+                Action:
+                  - ec2:CreateVpcEndpoint
+                  - ec2:DeleteVpcEndpoints
+                  - ec2:ModifyVpcEndpoint
+                  - ec2:DescribeVpcEndpoints
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeAccountAttributes
+                  - ec2:DescribeRouteTables
+                Resource: "*"
+              - Sid: ManageEcsClusterAndService
+                Effect: Allow
+                Action:
+                  - ecs:CreateCluster
+                  - ecs:DeleteCluster
+                  - ecs:DescribeClusters
+                  - ecs:RegisterTaskDefinition
+                  - ecs:DeregisterTaskDefinition
+                  - ecs:DescribeTaskDefinition
+                  - ecs:CreateService
+                  - ecs:UpdateService
+                  - ecs:DeleteService
+                  - ecs:DescribeServices
+                  - ecs:TagResource
+                  - ecs:UntagResource
+                  - ecs:ListTagsForResource
+                Resource: "*"
+              - Sid: ManageAlb
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:CreateLoadBalancer
+                  - elasticloadbalancing:DeleteLoadBalancer
+                  - elasticloadbalancing:DescribeLoadBalancers
+                  - elasticloadbalancing:ModifyLoadBalancerAttributes
+                  - elasticloadbalancing:CreateTargetGroup
+                  - elasticloadbalancing:DeleteTargetGroup
+                  - elasticloadbalancing:ModifyTargetGroup
+                  - elasticloadbalancing:ModifyTargetGroupAttributes
+                  - elasticloadbalancing:DescribeTargetGroups
+                  - elasticloadbalancing:DescribeTargetHealth
+                  - elasticloadbalancing:CreateListener
+                  - elasticloadbalancing:DeleteListener
+                  - elasticloadbalancing:ModifyListener
+                  - elasticloadbalancing:DescribeListeners
+                  - elasticloadbalancing:CreateRule
+                  - elasticloadbalancing:DeleteRule
+                  - elasticloadbalancing:ModifyRule
+                  - elasticloadbalancing:DescribeRules
+                  - elasticloadbalancing:AddTags
+                  - elasticloadbalancing:RemoveTags
+                  - elasticloadbalancing:DescribeTags
+                Resource: "*"
+              - Sid: ManageAutoScaling
+                Effect: Allow
+                Action:
+                  - application-autoscaling:RegisterScalableTarget
+                  - application-autoscaling:DeregisterScalableTarget
+                  - application-autoscaling:DescribeScalableTargets
+                  - application-autoscaling:PutScalingPolicy
+                  - application-autoscaling:DeleteScalingPolicy
+                  - application-autoscaling:DescribeScalingPolicies
+                Resource: "*"
+              - Sid: ManageCodeDeploy
+                Effect: Allow
+                Action:
+                  - codedeploy:CreateApplication
+                  - codedeploy:DeleteApplication
+                  - codedeploy:GetApplication
+                  - codedeploy:CreateDeploymentGroup
+                  - codedeploy:UpdateDeploymentGroup
+                  - codedeploy:DeleteDeploymentGroup
+                  - codedeploy:GetDeploymentGroup
+                  - codedeploy:TagResource
+                  - codedeploy:UntagResource
+                Resource: "*"
+              - Sid: ManageCodePipeline
+                Effect: Allow
+                Action:
+                  - codepipeline:CreatePipeline
+                  - codepipeline:UpdatePipeline
+                  - codepipeline:DeletePipeline
+                  - codepipeline:GetPipeline
+                  - codepipeline:GetPipelineState
+                  - codepipeline:TagResource
+                  - codepipeline:UntagResource
+                Resource: "*"
+              - Sid: ManageEventBridgeRuleForPipeline
+                Effect: Allow
+                Action:
+                  - events:PutRule
+                  - events:DeleteRule
+                  - events:PutTargets
+                  - events:RemoveTargets
+                  - events:DescribeRule
+                  - events:TagResource
+                  - events:UntagResource
+                Resource: "*"
+              - Sid: ManageCloudWatchLogGroups
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:PutRetentionPolicy
+                  - logs:DescribeLogGroups
+                  - logs:TagResource
+                  - logs:TagLogGroup
+                Resource: "*"
+              - Sid: PipelineArtifactPrefixOnSharedBucket
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetBucketVersioning
+                Resource:
+                  - arn:aws:s3:::arnold-bucket-dev
+                  - arn:aws:s3:::arnold-bucket-dev/aws-ecs/*
+              - Sid: ManageNestedStackOrchestration
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:DeleteStack
+                  - cloudformation:GetTemplateSummary
+                Resource: "*"
+
+Outputs:
+  GitSyncConnectionRoleArn:
+    Value: !GetAtt GitSyncConnectionRole.Arn
+  GitSyncStackExecutionRoleArn:
+    Value: !GetAtt GitSyncStackExecutionRole.Arn
