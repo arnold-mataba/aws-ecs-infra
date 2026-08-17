@@ -2,7 +2,8 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: "Nested-stack root for aws-ecs: wires network, ecr, ecs, and pipeline\
   \ child stacks together. Deployed via GitSync from packaged/root-packaged.yaml (this\
   \ source file's local TemplateURL references get rewritten to real S3 URLs by `aws\
-  \ cloudformation package` in CI - see .github/workflows/package-templates.yml).\n"
+  \ cloudformation package` in CI - see .github/workflows/package-templates.yml).\
+  \ Retry trigger: orphaned ECR repo/role cleaned up, ALB describe permissions fixed.\n"
 Parameters:
   ProjectName:
     Type: String
