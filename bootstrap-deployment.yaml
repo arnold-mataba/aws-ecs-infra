@@ -1,11 +1,3 @@
 template-file-path: bootstrap-stack.yaml
-parameters:
-  GithubOwner: arnold-mataba
-  GithubRepo: aws-ecs-infra
-  GithubBranch: main
-  GithubOidcProviderArn: arn:aws:iam::107737161507:oidc-provider/token.actions.githubusercontent.com
-  GithubRepositoryId: "1337039029"
-  GithubRepositoryOwnerId: "296819917"
-  TemplatesBucketName: arnold-bucket-dev
-  TemplatesPrefix: aws-ecs/templates/
+parameters: {}
 tags: {}
