@@ -133,15 +133,6 @@ Resources:
                 Resource:
                   - !Sub "arn:aws:s3:::${ArtifactBucketName}"
                   - !Sub "arn:aws:s3:::${ArtifactBucketName}/${PipelineName}/*"
-              - Sid: ReadEcrImageMetadata
-                Effect: Allow
-                Action:
-                  - ecr:DescribeImages
-                  - ecr:ListImages
-                  - ecr:BatchGetImage
-                  - ecr:GetDownloadUrlForLayer
-                  - ecr:BatchCheckLayerAvailability
-                Resource: !Ref EcrRepositoryArn
               - Sid: UseGithubConnection
                 Effect: Allow
                 Action:
@@ -177,17 +168,6 @@ Resources:
       Stages:
         - Name: Source
           Actions:
-            - Name: EcrImageSource
-              RunOrder: 1
-              ActionTypeId:
-                Category: Source
-                Owner: AWS
-                Provider: ECR
-                Version: '1'
-              Configuration:
-                RepositoryName: !Ref EcrRepositoryName
-              OutputArtifacts:
-                - Name: SourceImage
             - Name: AppConfigSource
               RunOrder: 1
               ActionTypeId:
@@ -212,7 +192,6 @@ Resources:
                 Provider: CodeDeployToECS
                 Version: '1'
               InputArtifacts:
-                - Name: SourceImage
                 - Name: SourceConfig
               Configuration:
                 ApplicationName: !Ref CodeDeployApplication
@@ -221,7 +200,7 @@ Resources:
                 TaskDefinitionTemplatePath: taskdef.json
                 AppSpecTemplateArtifact: SourceConfig
                 AppSpecTemplatePath: appspec.yaml
-                Image1ArtifactName: SourceImage
+                Image1ArtifactName: SourceConfig
                 Image1ContainerName: IMAGE1_NAME
 
   EventBridgeInvokePipelineRole:
