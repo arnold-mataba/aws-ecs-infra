@@ -6,6 +6,10 @@ on:
     paths:
       - 'templates/**'
 
+concurrency:
+  group: package-templates-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   id-token: write
   contents: write
@@ -40,4 +44,16 @@ jobs:
           git add packaged/root-packaged.yaml
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "chore: package nested templates for ${{ github.sha }}"
-          git push
+
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then
+              echo "Pushed on attempt $attempt"
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt) - main moved, rebasing and retrying"
+            git fetch origin main
+            git rebase origin/main
+            sleep 3
+          done
+          echo "Failed to push packaged template after 5 attempts"
+          exit 1
