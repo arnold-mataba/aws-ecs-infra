@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Bootstrap stack for the aws-ecs-infra repo. Creates a least-privilege IAM
+  role, assumable only by GitHub Actions (via OIDC) in this exact repo/branch,
+  that CI uses to run `aws cloudformation package` and upload the nested
+  stack templates into a fixed prefix of an existing shared S3 bucket. This
+  role can only write objects to that prefix - it has no CloudFormation
+  permissions at all, so a compromised packaging job cannot touch any live
+  infrastructure, only overwrite packaged template files.
+
+Parameters:
+  GithubOwner:
+    Type: String
+    Default: arnold-mataba
+    Description: GitHub account that owns the repo.
+
+  GithubRepo:
+    Type: String
+    Default: aws-ecs-infra
+    Description: GitHub repo name (without owner).
+
+  GithubBranch:
+    Type: String
+    Default: main
+    Description: Only workflow runs on this branch may assume the role.
+
+  GithubOidcProviderArn:
+    Type: String
+    Default: arn:aws:iam::107737161507:oidc-provider/token.actions.githubusercontent.com
+    Description: ARN of the (already registered) GitHub OIDC provider in this account.
+
+  GithubRepositoryId:
+    Type: String
+    Default: "1337039029"
+    Description: Immutable numeric GitHub repository ID (survives renames).
+
+  GithubRepositoryOwnerId:
+    Type: String
+    Default: "296819917"
+    Description: Immutable numeric GitHub account ID (survives renames).
+
+  TemplatesBucketName:
+    Type: String
+    Default: arnold-bucket-dev
+    Description: Existing, pre-created S3 bucket shared across labs. Not managed by this stack.
+
+  TemplatesPrefix:
+    Type: String
+    Default: aws-ecs/templates/
+    Description: Prefix within the shared bucket that this project's packaged templates live under.
+
+Resources:
+  GithubActionsCfnPackageRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: github-actions-cfn-package-aws-ecs
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GithubOidcProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GithubOwner}@${GithubRepositoryOwnerId}/${GithubRepo}@${GithubRepositoryId}:ref:refs/heads/${GithubBranch}"
+                token.actions.githubusercontent.com:repository_id: !Ref GithubRepositoryId
+                token.actions.githubusercontent.com:repository_owner_id: !Ref GithubRepositoryOwnerId
+      Policies:
+        - PolicyName: CfnPackageS3PrefixOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: UploadPackagedTemplates
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource: !Sub "arn:aws:s3:::${TemplatesBucketName}/${TemplatesPrefix}*"
+      Tags:
+        - Key: Project
+          Value: aws-ecs
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  PackageRoleArn:
+    Value: !GetAtt GithubActionsCfnPackageRole.Arn
+  TemplatesBucketName:
+    Value: !Ref TemplatesBucketName
+  TemplatesPrefix:
+    Value: !Ref TemplatesPrefix
