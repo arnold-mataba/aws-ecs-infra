@@ -87,7 +87,6 @@ Resources:
     Properties:
       RepositoryName: !Ref EcrRepositoryName
       ImageTagMutability: IMMUTABLE
-      EmptyOnDelete: true
       ImageScanningConfiguration:
         ScanOnPush: true
       LifecyclePolicy:
