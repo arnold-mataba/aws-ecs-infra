@@ -201,7 +201,7 @@ Resources:
                 AppSpecTemplateArtifact: SourceConfig
                 AppSpecTemplatePath: appspec.yaml
                 Image1ArtifactName: SourceConfig
-                Image1ContainerName: IMAGE1_NAME
+                Image1ContainerName: app
 
   EventBridgeInvokePipelineRole:
     Type: AWS::IAM::Role
