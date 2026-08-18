@@ -1,9 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   EventBridge -> CodePipeline -> CodeDeploy (ECS blue/green) for the aws-ecs
-  app. Pipeline has two parallel source actions (ECR image, and the app
-  repo's appspec.yaml/taskdef.json), feeding a single CodeDeployToECS
-  deploy action. Nested-stack child of templates/root.yaml.
+  app. Single GitHub source action supplies appspec.yaml, taskdef.json, and
+  imageDetail.json (written by the app repo's own CI right after it pushes
+  to ECR - CodePipeline's built-in ECR source action always looks for tag
+  :latest, which never exists in this immutable-tag repo, so it isn't
+  used). Nested-stack child of templates/root.yaml.
 
 Parameters:
   ProjectName:
